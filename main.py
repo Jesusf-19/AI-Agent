@@ -26,34 +26,38 @@ def main():
         {"role": "user", "content": args.user_prompt},
     ]
 
-    response = client.chat.completions.create(
-        model="openrouter/free",
-        messages=messages,
-        temperature=0,
-        tools=available_functions)
+    for _ in range(20):
+        response = client.chat.completions.create(
+            model="openrouter/free",
+            messages=messages,
+            tools=available_functions,
+        )
 
-    if response.usage is None:
-        raise RuntimeError("The API response did not have usage information.")
+        if args.verbose and response.usage is not None:
+            print(f"Prompt tokens: {response.usage.prompt_tokens}")
+            print(f"Response tokens: {response.usage.completion_tokens}")
 
-    if args.verbose:
-        print(f"User prompt: {args.user_prompt}")
-        print(f"Prompt tokens: {response.usage.prompt_tokens}")
-        print(f"Response tokens: {response.usage.completion_tokens}")
+        message = response.choices[0].message
+        messages.append(message)
 
-    message = response.choices[0].message
+        if message.tool_calls:
+            for tool_call in message.tool_calls:
+                result_message = call_function(tool_call, args.verbose)
 
-    if message.tool_calls:
-        for tool_call in message.tool_calls:
-            result_message = call_function(tool_call, args.verbose)
+                if not result_message["content"]:
+                    raise Exception("Function call returned no content")
 
-            if not result_message["content"]:
-                raise Exception("Function call returned no content")
+                messages.append(result_message)
 
-            if args.verbose:
-                print(f"-> {result_message['content']}")
-    else:
-        print(message.content)
-    
+                if args.verbose:
+                    print(f"-> {result_message['content']}")
+
+        else:
+            print("Final response:")
+            print(message.content)
+            return
+
+    print("Error: reached maximum iterations without a final response")
 
 
 if __name__ == "__main__":
