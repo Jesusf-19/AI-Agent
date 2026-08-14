@@ -1,6 +1,8 @@
 # AI Agent
 
-A Python-based AI agent project. The project uses the OpenAI SDK with OpenRouter and includes several safe tool functions that allow the agent to inspect, read, write, and run files inside a controlled working directory.
+A Python-based AI coding agent project. The project uses the OpenAI SDK with OpenRouter and includes safe tool functions that allow the agent to inspect, read, write, and run files inside a controlled working directory.
+
+The agent can receive a user prompt, decide which tool function to call, execute that function, add the result back into the conversation, and continue until it produces a final response. Also credit given to Boots.dev.
 
 ## Project Structure
 
@@ -18,12 +20,15 @@ ai_agent/
 │   ├── get_file_content.py
 │   ├── write_file.py
 │   └── run_python_file.py
+├── call_function.py
 ├── config.py
 ├── main.py
 ├── test_get_files_info.py
 ├── test_get_file_content.py
 ├── test_write_file.py
 ├── test_run_python_file.py
+├── pyproject.toml
+├── uv.lock
 └── README.md
 ```
 
@@ -36,6 +41,8 @@ ai_agent/
 * Includes safe file tools for listing, reading, writing, and running files
 * Restricts file access to a permitted working directory
 * Includes manual test files for each tool function
+* Uses function schemas so the LLM knows which tools are available
+* Runs in a loop so the agent can call tools and continue working until it has a final response
 
 ## Setup
 
@@ -71,11 +78,19 @@ The prompt is stored in a messages list:
 
 ```python
 messages = [
+    {"role": "system", "content": system_prompt},
     {"role": "user", "content": args.user_prompt},
 ]
 ```
-
-This structure makes it easier to add more messages later as the agent becomes more advanced.
+The model is also given a list of available tools:
+```python
+response = client.chat.completions.create(
+    model="openrouter/free",
+    messages=messages,
+    tools=available_functions,
+)
+```
+If the model asks to call a tool, the program runs the matching function and appends the result back into the conversation. The loop continues until the model returns a final response.
 
 ## Tool Functions
 
@@ -133,6 +148,32 @@ run_python_file("calculator", "main.py", ["3 + 5"])
 
 It captures `stdout`, `stderr`, and prevents long-running scripts with a timeout.
 
+## Function Calling
+
+Each tool has a schema that describes how the LLM should call it. These schemas include the function name, description, and parameters.
+
+The schemas are collected in available_functions and passed to the model.
+
+The LLM does not receive the working_directory argument. Instead, the program injects it automatically:
+```python
+function_args["working_directory"] = "./calculator"
+```
+This keeps the agent limited to the calculator project and prevents it from accessing files outside the allowed directory.
+
+## Agent Loop
+
+The agent runs inside a loop with a maximum number of iterations.
+
+Each loop:
+
+Sends the current conversation history to the model
+Checks if the model requested any tool calls
+Runs the requested tool functions
+Appends the tool results back into the message history
+Continues until the model produces a final response
+
+This allows the agent to inspect files, read code, run tests, write files, and answer based on the results.
+
 ## Path Safety
 
 All tool functions validate paths before reading, writing, listing, or running files.
@@ -175,6 +216,7 @@ These tests check the file tools with valid inputs, invalid paths, missing files
 * argparse
 * python-dotenv
 * subprocess
+* JSON tool schemas
 * uv
 
 ## What I Learned
@@ -189,7 +231,9 @@ This project helped me practice:
 * Reading and writing files with Python
 * Running Python scripts through subprocesses
 * Creating manual test files for debugging
+* Creating JSON schemas for tool/function calling
+* Building an agent loop that can call tools and continue working
 
 ## Status
 
-This project is still in progress. The current version focuses on building safe tool functions that can later be connected to the AI agent loop.
+This project now includes a working AI agent loop. The agent can receive a prompt, request tool calls, execute local functions safely, add tool results back into the conversation, and continue until it produces a final response.
